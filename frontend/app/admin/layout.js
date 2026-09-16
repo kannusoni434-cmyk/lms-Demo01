@@ -10,10 +10,14 @@ export default function AdminLayout({ children }) {
   const router = useRouter();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
+  if (pathname === '/admin/login') {
+    return <>{children}</>;
+  }
+
   const handleLogout = async () => {
     try {
       await fetchApi('/auth/logout', { method: 'POST' });
-      router.push('/');
+      router.push('/admin/login');
     } catch (e) {
       console.error('Logout failed', e);
     }

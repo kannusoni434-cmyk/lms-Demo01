@@ -12,7 +12,7 @@ export default function StudentLayout({ children }) {
 
   useEffect(() => {
     // Skip auth check if we're on the login page
-    if (pathname === "/student/login") {
+    if (pathname === "/student/login" || pathname === "/student/login/") {
       setIsChecking(false);
       return;
     }
@@ -82,7 +82,7 @@ Stack trace: ${err.stack}
     { name: "Profile", href: "/student/profile", exact: false },
   ];
 
-  if (pathname === "/student/login") {
+  if (pathname === "/student/login" || pathname === "/student/login/") {
     return <>{children}</>;
   }
 

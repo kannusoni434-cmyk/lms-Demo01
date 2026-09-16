@@ -1,13 +1,15 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { fetchApi, API_URL } from "@/lib/api";
 import dynamic from "next/dynamic";
 const VideoPlayer = dynamic(() => import("@/components/VideoPlayer"), { ssr: false });
+import { Suspense } from "react";
 
-export default function StudentCourseDetailsPage() {
-  const { courseId } = useParams();
+function StudentCourseDetailsContent() {
+  const searchParams = useSearchParams();
+  const courseId = searchParams.get('id');
   const [course, setCourse] = useState(null);
   const [dashboardData, setDashboardData] = useState(null);
   const [videos, setVideos] = useState([]);
@@ -355,22 +357,30 @@ export default function StudentCourseDetailsPage() {
             </div>
 
             <div>
-              <h3 className="font-bold text-gray-900 mb-4 text-xl flex items-center gap-2">
-                <svg
-                  className="w-6 h-6 text-gray-400"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="2"
-                    d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                  ></path>
-                </svg>
-                Video Description
-              </h3>
+              <div className="flex justify-between items-center mb-4 flex-wrap gap-2">
+                <h3 className="font-bold text-gray-900 text-xl flex items-center gap-2">
+                  <svg
+                    className="w-6 h-6 text-gray-400"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="2"
+                      d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                    ></path>
+                  </svg>
+                  Video Description
+                </h3>
+                {playingVideo?.expiresAt && (
+                  <span className="bg-amber-50 text-amber-600 text-sm font-bold px-3 py-1 rounded-lg border border-amber-100 flex items-center gap-1.5 shadow-sm">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    Valid until: {new Date(playingVideo.expiresAt).toLocaleDateString()}
+                  </span>
+                )}
+              </div>
               <div className="prose prose-red max-w-none text-gray-600 leading-relaxed">
                 {playingVideo?.description ? (
                   playingVideo.description.split("\n").map((paragraph, idx) => (
@@ -471,6 +481,12 @@ export default function StudentCourseDetailsPage() {
                       {video.processingStatus === 'processing' && (
                         <span className="inline-block mt-1 mb-1 text-[10px] font-semibold bg-yellow-100 text-yellow-800 px-1.5 py-0.5 rounded">Processing Video...</span>
                       )}
+                      {video.expiresAt && (
+                        <div className="text-[10px] text-amber-600 font-bold mb-1.5 flex items-center gap-1">
+                           <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                           Expires: {new Date(video.expiresAt).toLocaleDateString()}
+                        </div>
+                      )}
                       <div className="flex items-center gap-2">
                         {isActive ? (
                           <span className="text-xs font-bold bg-[#c71e22] text-white px-2 py-0.5 rounded flex items-center gap-1 shadow-sm uppercase tracking-wide">
@@ -509,5 +525,13 @@ export default function StudentCourseDetailsPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function StudentCourseDetailsPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-center text-gray-500">Loading course...</div>}>
+      <StudentCourseDetailsContent />
+    </Suspense>
   );
 }

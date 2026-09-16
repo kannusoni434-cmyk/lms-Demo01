@@ -1,14 +1,15 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { fetchApi, API_URL } from "@/lib/api";
-import { compressVideo } from "@/lib/videoCompressor";
 import dynamic from "next/dynamic";
+import { Suspense } from "react";
 const VideoPlayer = dynamic(() => import("@/components/VideoPlayer"), { ssr: false });
 
-export default function CourseDetailsPage() {
-  const { id } = useParams();
+function CourseDetailsContent() {
+  const searchParams = useSearchParams();
+  const id = searchParams.get('id');
   const [course, setCourse] = useState(null);
   
   const getOptimizedVideoUrl = (url) => {
@@ -217,7 +218,7 @@ export default function CourseDetailsPage() {
                           <span className="text-red-500 text-xs">Failed</span>
                         ) : null}
                         {video.expiresAt && (
-                           <div className="text-[10px] text-amber-500 font-medium mt-1">Expires: {new Date(video.expiresAt).toLocaleDateString()}</div>
+                           <div className="text-xs font-bold text-amber-600 bg-amber-50 border border-amber-100 px-2 py-1 rounded-md mt-2 inline-block">Expires: {new Date(video.expiresAt).toLocaleDateString()}</div>
                         )}
                       </div>
                       <div className="flex items-center">
@@ -296,28 +297,29 @@ export default function CourseDetailsPage() {
   );
 }
 
+export default function CourseDetailsPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-center text-gray-500">Loading course details...</div>}>
+      <CourseDetailsContent />
+    </Suspense>
+  );
+}
+
 
 function UploadVideoModal({ courseId, onClose, onSuccess }) {
-  const [title, setTitle] = useState("");
-  const [file, setFile] = useState(null);
-  const [status, setStatus] = useState("SELECTED");
-  const [error, setError] = useState("");
-  const [uploadProgress, setUploadProgress] = useState(0);
-  const [compressionProgress, setCompressionProgress] = useState(0);
-  const [uploadedBytes, setUploadedBytes] = useState(0);
-  const [uploadSpeed, setUploadSpeed] = useState(0);
-  const [timeRemaining, setTimeRemaining] = useState(null);
+  const [queue, setQueue] = useState([]);
+  const [isUploading, setIsUploading] = useState(false);
   const [showConfirmClose, setShowConfirmClose] = useState(false);
+  const [globalError, setGlobalError] = useState("");
 
   const abortControllerRef = useRef(null);
   const activeXhrs = useRef(new Set());
   const isCancelled = useRef(false);
-  const uploadInfo = useRef(null);
-  const statusRef = useRef(status);
 
-  useEffect(() => {
-    statusRef.current = status;
-  }, [status]);
+  const queueRef = useRef(queue);
+  useEffect(() => { queueRef.current = queue; }, [queue]);
+  const isUploadingRef = useRef(isUploading);
+  useEffect(() => { isUploadingRef.current = isUploading; }, [isUploading]);
 
   useEffect(() => {
     const saved = localStorage.getItem(`r2_upload_${courseId}`);
@@ -326,7 +328,7 @@ function UploadVideoModal({ courseId, onClose, onSuccess }) {
     }
 
     const handleBeforeUnload = (e) => {
-      if (statusRef.current === "COMPRESSING" || statusRef.current === "UPLOADING" || statusRef.current === "PROCESSING") {
+      if (isUploadingRef.current) {
         e.preventDefault();
         e.returnValue = "Video upload is still in progress. Are you sure you want to leave?";
       }
@@ -335,7 +337,7 @@ function UploadVideoModal({ courseId, onClose, onSuccess }) {
 
     return () => {
       window.removeEventListener("beforeunload", handleBeforeUnload);
-      if (statusRef.current === "COMPRESSING" || statusRef.current === "UPLOADING" || statusRef.current === "PROCESSING") {
+      if (isUploadingRef.current) {
         isCancelled.current = true;
         if (abortControllerRef.current) {
           abortControllerRef.current.abort();
@@ -346,19 +348,55 @@ function UploadVideoModal({ courseId, onClose, onSuccess }) {
     };
   }, [courseId]);
 
+  const handleFilesSelected = (e) => {
+    const files = Array.from(e.target.files);
+    if (!files.length) return;
+    
+    const newItems = files.map(file => ({
+      id: Math.random().toString(36).substring(7),
+      file,
+      title: file.name.replace(/\.[^/.]+$/, ""),
+      status: "WAITING",
+      progress: 0,
+      uploadedBytes: 0,
+      speed: 0,
+      timeRemaining: null,
+      error: ""
+    }));
+    
+    setQueue(prev => [...prev, ...newItems]);
+    setGlobalError("");
+    e.target.value = null; // reset input
+  };
+
+  const removeQueueItem = (id) => {
+    setQueue(prev => prev.filter(item => item.id !== id));
+  };
+  
+  const updateQueueItem = (id, updates) => {
+    setQueue(prev => prev.map(item => item.id === id ? { ...item, ...updates } : item));
+  };
+
   const handleCancel = () => {
     isCancelled.current = true;
-    setStatus("CANCELLED");
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
     activeXhrs.current.forEach(xhr => xhr.abort());
     activeXhrs.current.clear();
     localStorage.removeItem(`r2_upload_${courseId}`);
+    
+    setQueue(prev => prev.map(item => {
+      if (item.status === "WAITING" || item.status === "UPLOADING" || item.status === "PROCESSING") {
+        return { ...item, status: "CANCELLED" };
+      }
+      return item;
+    }));
+    setIsUploading(false);
   };
 
   const attemptClose = () => {
-    if (status === "COMPRESSING" || status === "UPLOADING" || status === "PROCESSING") {
+    if (isUploading) {
       setShowConfirmClose(true);
     } else {
       onClose();
@@ -370,165 +408,163 @@ function UploadVideoModal({ courseId, onClose, onSuccess }) {
     onClose();
   };
 
+  const processQueue = async () => {
+    if (isUploadingRef.current) return;
+    
+    setIsUploading(true);
+    isCancelled.current = false;
+    abortControllerRef.current = new AbortController();
+    
+    const baseApiHost = API_URL.replace(/\/api\/?$/, "");
+      
+    const token = localStorage.getItem('token');
+    const headers = { "Content-Type": "application/json" };
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+
+    let someCompleted = false;
+
+    for (let i = 0; i < queueRef.current.length; i++) {
+      if (isCancelled.current) break;
+      
+      const item = queueRef.current[i];
+      if (item.status !== "WAITING") continue;
+      
+      updateQueueItem(item.id, { status: "UPLOADING", error: "" });
+      
+      try {
+        const initRes = await fetch(`${baseApiHost}/api/videos/presigned-url`, {
+          method: "POST",
+          headers,
+          credentials: "include",
+          body: JSON.stringify({
+            courseId,
+            fileName: item.file.name,
+            fileType: item.file.type || "video/mp4",
+            title: item.title.trim() || item.file.name,
+            size: item.file.size
+          }),
+          signal: abortControllerRef.current.signal
+        });
+        if (!initRes.ok) throw new Error("Failed to get upload URL");
+        
+        const { uploadUrl, objectKey, videoId } = await initRes.json();
+        
+        if (isCancelled.current) throw new Error("Upload cancelled");
+        
+        let lastUpdateTime = 0;
+        let lastLoaded = 0;
+        
+        await new Promise((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          activeXhrs.current.add(xhr);
+          xhr.open("PUT", uploadUrl);
+          xhr.setRequestHeader("Content-Type", item.file.type || "video/mp4");
+          
+          xhr.upload.onprogress = (event) => {
+            if (isCancelled.current) {
+              xhr.abort();
+              return;
+            }
+            if (event.lengthComputable) {
+              const now = Date.now();
+              if (now - lastUpdateTime > 250) {
+                const diffBytes = event.loaded - lastLoaded;
+                const diffTime = (now - lastUpdateTime) / 1000;
+                const speed = diffTime > 0 ? diffBytes / diffTime : 0;
+                
+                lastUpdateTime = now;
+                lastLoaded = event.loaded;
+                
+                const progress = Math.min(100, Math.round((event.loaded / event.total) * 100));
+                const remainingBytes = Math.max(0, event.total - event.loaded);
+                const etaSeconds = speed > 0 ? remainingBytes / speed : 0;
+                
+                updateQueueItem(item.id, {
+                  uploadedBytes: event.loaded,
+                  progress,
+                  speed,
+                  timeRemaining: etaSeconds
+                });
+              }
+            }
+          };
+          
+          xhr.onload = () => {
+            activeXhrs.current.delete(xhr);
+            if (xhr.status >= 200 && xhr.status < 300) {
+              resolve();
+            } else {
+              reject(new Error(`HTTP ${xhr.status} ${xhr.statusText}`));
+            }
+          };
+          
+          xhr.onerror = () => {
+            activeXhrs.current.delete(xhr);
+            reject(new Error("Network error"));
+          };
+          
+          xhr.onabort = () => {
+            activeXhrs.current.delete(xhr);
+            reject(new Error("Upload cancelled"));
+          };
+          
+          xhr.send(item.file);
+        });
+        
+        if (isCancelled.current) throw new Error("Upload cancelled");
+        
+        updateQueueItem(item.id, {
+          uploadedBytes: item.file.size,
+          progress: 100,
+          timeRemaining: 0,
+          status: "PROCESSING"
+        });
+        
+        const saveRes = await fetch(`${baseApiHost}/api/videos/upload-complete`, {
+          method: "POST",
+          headers,
+          credentials: "include",
+          body: JSON.stringify({ videoId, objectKey }),
+          signal: abortControllerRef.current.signal
+        });
+
+        if (!saveRes.ok) {
+          const errorData = await saveRes.json().catch(() => ({}));
+          throw new Error(errorData.error || "Failed to save video metadata");
+        }
+        
+        updateQueueItem(item.id, { status: "COMPLETED" });
+        someCompleted = true;
+        
+      } catch (err) {
+        if (isCancelled.current || err.message === "Upload cancelled" || err.name === 'AbortError') {
+           updateQueueItem(item.id, { status: "CANCELLED" });
+        } else {
+           console.error(err);
+           updateQueueItem(item.id, { status: "FAILED", error: err.message || "An unexpected error occurred" });
+        }
+      }
+    }
+    
+    setIsUploading(false);
+    if (someCompleted) {
+      onSuccess();
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!file) {
-      setError("Please select a video file");
+    if (queue.length === 0) {
+      setGlobalError("Please select at least one video file");
       return;
     }
-
-    setStatus("COMPRESSING");
-    setError("");
-    setCompressionProgress(0);
-    setUploadProgress(0);
-    setUploadedBytes(0);
-    setUploadSpeed(0);
-    setTimeRemaining(null);
-    isCancelled.current = false;
-    uploadInfo.current = null;
-    activeXhrs.current.clear();
-
-    abortControllerRef.current = new AbortController();
-
-    const startTime = Date.now();
-
-    try {
-      let fileToUpload = file;
-
-      try {
-        fileToUpload = await compressVideo(file, (progress) => {
-          setCompressionProgress(progress);
-        }, abortControllerRef.current.signal);
-      } catch (err) {
-        if (err.message === "Compression cancelled") {
-          throw new Error("Upload cancelled");
-        }
-        console.error("Compression failed, falling back to original file", err);
-        fileToUpload = file;
-      }
-
-      if (isCancelled.current) throw new Error("Upload cancelled");
-
-      setStatus("UPLOADING");
-
-      const baseApiHost = process.env.NEXT_PUBLIC_API_URL 
-        ? process.env.NEXT_PUBLIC_API_URL.replace(/\/api\/?$/, "") 
-        : "https://lmsbackend.jainscomputer.com";
-        
-      const token = localStorage.getItem('token');
-      const headers = { "Content-Type": "application/json" };
-      if (token) headers["Authorization"] = `Bearer ${token}`;
-
-      const initRes = await fetch(`${baseApiHost}/api/videos/presigned-url`, {
-        method: "POST",
-        headers,
-        credentials: "include",
-        body: JSON.stringify({
-          courseId,
-          fileName: fileToUpload.name,
-          fileType: fileToUpload.type || "video/mp4",
-          title: title.trim(),
-          size: fileToUpload.size
-        }),
-      });
-      if (!initRes.ok) throw new Error("Failed to get upload URL");
-      
-      const { uploadUrl, objectKey, videoId } = await initRes.json();
-      uploadInfo.current = { objectKey, videoId };
-      
-      if (isCancelled.current) throw new Error("Upload cancelled");
-
-      let lastUpdateTime = 0;
-      let lastLoaded = 0;
-      
-      await new Promise((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        activeXhrs.current.add(xhr);
-        xhr.open("PUT", uploadUrl);
-        xhr.setRequestHeader("Content-Type", fileToUpload.type || "video/mp4");
-        
-        xhr.upload.onprogress = (event) => {
-          if (isCancelled.current) {
-            xhr.abort();
-            return;
-          }
-          if (event.lengthComputable) {
-            const now = Date.now();
-            if (now - lastUpdateTime > 250) {
-              const diffBytes = event.loaded - lastLoaded;
-              const diffTime = (now - lastUpdateTime) / 1000;
-              const speed = diffTime > 0 ? diffBytes / diffTime : 0;
-              
-              lastUpdateTime = now;
-              lastLoaded = event.loaded;
-              
-              setUploadedBytes(event.loaded);
-              setUploadProgress(Math.min(100, Math.round((event.loaded / event.total) * 100)));
-              setUploadSpeed(speed);
-              
-              const remainingBytes = Math.max(0, event.total - event.loaded);
-              const etaSeconds = speed > 0 ? remainingBytes / speed : 0;
-              setTimeRemaining(etaSeconds);
-            }
-          }
-        };
-        
-        xhr.onload = () => {
-          activeXhrs.current.delete(xhr);
-          if (xhr.status >= 200 && xhr.status < 300) {
-            resolve();
-          } else {
-            reject(new Error(`HTTP ${xhr.status} ${xhr.statusText}`));
-          }
-        };
-        
-        xhr.onerror = () => {
-          activeXhrs.current.delete(xhr);
-          reject(new Error("Network error"));
-        };
-        
-        xhr.onabort = () => {
-          activeXhrs.current.delete(xhr);
-          reject(new Error("Upload cancelled"));
-        };
-        
-        xhr.send(fileToUpload);
-      });
-
-      if (isCancelled.current) throw new Error("Upload cancelled");
-
-      setUploadedBytes(fileToUpload.size);
-      setUploadProgress(100);
-      setTimeRemaining(0);
-      setStatus("PROCESSING");
-
-      const saveRes = await fetch(`${baseApiHost}/api/videos/upload-complete`, {
-        method: "POST",
-        headers,
-        credentials: "include",
-        body: JSON.stringify({ videoId, objectKey }),
-      });
-
-      if (!saveRes.ok) {
-        const errorData = await saveRes.json().catch(() => ({}));
-        throw new Error(errorData.error || "Failed to save video metadata");
-      }
-
-      localStorage.removeItem(`r2_upload_${courseId}`);
-      setStatus("COMPLETED");
-      setTimeout(() => {
-        onSuccess();
-      }, 1000);
-      
-    } catch (err) {
-      if (isCancelled.current || err.message === "Upload cancelled") {
-         setStatus("CANCELLED");
-      } else {
-         console.error(err);
-         setError(err.message || "An unexpected error occurred during upload");
-         setStatus("FAILED");
-      }
+    if (queue.some(q => !q.title.trim())) {
+      setGlobalError("Please provide a title for all videos");
+      return;
     }
+    
+    setGlobalError("");
+    processQueue();
   };
 
   const formatBytes = (bytes, decimals = 2) => {
@@ -550,15 +586,15 @@ function UploadVideoModal({ courseId, onClose, onSuccess }) {
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden relative">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden relative max-h-[90vh] flex flex-col">
         {showConfirmClose && (
           <div className="absolute inset-0 bg-white/95 z-50 flex items-center justify-center p-8 text-center flex-col backdrop-blur-sm rounded-2xl">
              <div className="w-14 h-14 bg-red-100 text-red-600 rounded-2xl flex items-center justify-center mb-4">
                <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
              </div>
              <h3 className="text-lg font-bold text-gray-900 mb-2">Cancel video upload?</h3>
-             <p className="text-gray-500 text-sm mb-6">The current upload will be aborted and you will lose your progress.</p>
-             <div className="flex flex-col md:flex-row gap-3 w-full">
+             <p className="text-gray-500 text-sm mb-6">The current upload queue will be aborted and you will lose your progress.</p>
+             <div className="flex flex-col md:flex-row gap-3 w-full max-w-sm mx-auto">
                <button onClick={() => setShowConfirmClose(false)} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-700 font-semibold hover:bg-gray-50 transition-colors text-sm">
                  Continue Upload
                </button>
@@ -569,106 +605,121 @@ function UploadVideoModal({ courseId, onClose, onSuccess }) {
           </div>
         )}
 
-        <div className="px-6 py-5 border-b border-gray-100 flex justify-between items-center">
-          <h2 className="text-lg font-bold text-gray-900">Upload Video</h2>
+        <div className="px-6 py-5 border-b border-gray-100 flex justify-between items-center shrink-0">
+          <h2 className="text-lg font-bold text-gray-900">Upload Videos</h2>
           <button onClick={attemptClose} className="text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg p-1 transition-colors">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
           </button>
         </div>
         
-        <form onSubmit={handleSubmit} className="p-6">
-          {error && <div className="mb-4 text-sm text-red-600 bg-red-50 p-3 rounded-xl font-medium border border-red-100">{error}</div>}
-          
-          <div className="mb-4">
-            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Video Title *</label>
-            <input 
-              type="text" required
-              value={title} onChange={e => setTitle(e.target.value)}
-              disabled={status === "COMPRESSING" || status === "UPLOADING" || status === "PROCESSING" || status === "COMPLETED"}
-              className="w-full border border-gray-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-red-100 focus:border-red-300 focus:outline-none text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
-              placeholder="e.g., Introduction to Module 1"
-            />
-          </div>
-          
-          <div className="mb-6">
-            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Video File *</label>
-            <div className={`border-2 border-dashed ${file ? 'border-[#c71e22] bg-red-50' : 'border-gray-200'} rounded-xl p-6 text-center hover:bg-gray-50 transition-colors cursor-pointer relative overflow-hidden`}>
-              <input 
-                type="file" required accept="video/mp4,video/x-m4v,video/*"
-                onChange={e => {
-                    setFile(e.target.files[0]);
-                    setStatus("SELECTED");
-                    setError("");
-                }}
-                disabled={status === "COMPRESSING" || status === "UPLOADING" || status === "PROCESSING" || status === "COMPLETED"}
-                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
-              />
-              
-              {(status === "COMPRESSING" || status === "UPLOADING" || status === "PROCESSING" || status === "COMPLETED") && (status === "COMPRESSING" ? compressionProgress : uploadProgress) > 0 && (
-                <div 
-                  className={`absolute bottom-0 left-0 h-1 transition-all duration-300 ${status === "FAILED" ? "bg-red-500" : status === "COMPLETED" ? "bg-green-500" : "bg-[#c71e22]"}`} 
-                  style={{ width: `${status === "COMPRESSING" ? compressionProgress : uploadProgress}%` }}
-                ></div>
-              )}
-              
-              <svg className={`w-7 h-7 mx-auto mb-2 ${file ? 'text-[#c71e22]' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
-              <div className={`text-sm font-semibold ${file ? 'text-gray-900' : 'text-[#c71e22]'}`}>
-                {file ? "Video Selected" : "Click to browse"}
-              </div>
-              <div className="text-xs text-gray-400 mt-1">{file ? file.name : "MP4, WebM, MOV"}</div>
-            </div>
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
+          <div className="p-6 overflow-y-auto flex-1">
+            {globalError && <div className="mb-4 text-sm text-red-600 bg-red-50 p-3 rounded-xl font-medium border border-red-100">{globalError}</div>}
             
-            {(status === "COMPRESSING" || status === "UPLOADING" || status === "PROCESSING" || status === "COMPLETED" || status === "FAILED" || status === "CANCELLED") && (status === "COMPRESSING" ? compressionProgress : uploadProgress) > 0 && (
-              <div className="mt-3 flex flex-col gap-2 text-xs font-semibold text-gray-600">
-                <div className="flex items-center justify-between">
-                  <span>
-                    {status === "COMPRESSING" && "Compressing video in browser..."}
-                    {status === "UPLOADING" && "Uploading to R2..."}
-                    {status === "PROCESSING" && "Saving metadata..."}
-                    {status === "COMPLETED" && "Upload complete!"}
-                    {status === "FAILED" && "Upload failed"}
-                    {status === "CANCELLED" && "Upload cancelled"}
-                  </span>
-                  <span className={status === "COMPLETED" ? "text-green-600" : (status === "FAILED" || status === "CANCELLED") ? "text-red-600" : "text-[#c71e22]"}>{status === "COMPRESSING" ? compressionProgress : uploadProgress}%</span>
+            <div className="mb-6">
+              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Select Video Files *</label>
+              <div className={`border-2 border-dashed border-gray-200 rounded-xl p-6 text-center hover:bg-gray-50 transition-colors cursor-pointer relative overflow-hidden`}>
+                <input 
+                  type="file" multiple accept="video/mp4,video/x-m4v,video/*"
+                  onChange={handleFilesSelected}
+                  disabled={isUploading}
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
+                />
+                <svg className="w-7 h-7 mx-auto mb-2 text-[#c71e22]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
+                <div className="text-sm font-semibold text-gray-900">
+                  Click to browse or drag files here
                 </div>
-                {status === "UPLOADING" && file && (
-                   <div className="flex flex-col md:flex-row md:items-center justify-between text-gray-500 bg-gray-50 p-2.5 rounded-xl border border-gray-100 gap-2 md:gap-0">
-                     <div className="flex flex-col gap-0.5">
-                        <span>Size: {formatBytes(uploadedBytes)} / {formatBytes(file.size)}</span>
-                        <span>Speed: {formatBytes(uploadSpeed)}/s</span>
-                     </div>
-                     <div className="flex flex-col gap-0.5 md:text-right">
-                        <span>ETA: {formatTime(timeRemaining)}</span>
-                     </div>
-                   </div>
-                )}
+                <div className="text-xs text-gray-400 mt-1">MP4, WebM, MOV (Multiple files supported)</div>
+              </div>
+            </div>
+
+            {queue.length > 0 && (
+              <div className="space-y-4">
+                <h3 className="text-sm font-bold text-gray-700 border-b border-gray-100 pb-2">Upload Queue ({queue.length})</h3>
+                {queue.map((item, index) => (
+                  <div key={item.id} className="bg-gray-50 border border-gray-200 rounded-xl p-4 flex flex-col gap-3 relative overflow-hidden">
+                    {(item.status === "UPLOADING" || item.status === "PROCESSING" || item.status === "COMPLETED") && item.progress > 0 && (
+                      <div 
+                        className={`absolute bottom-0 left-0 h-1 transition-all duration-300 ${item.status === "FAILED" ? "bg-red-500" : item.status === "COMPLETED" ? "bg-green-500" : "bg-[#c71e22]"}`} 
+                        style={{ width: `${item.progress}%` }}
+                      ></div>
+                    )}
+                    
+                    <div className="flex justify-between items-start gap-4">
+                      <div className="flex-1">
+                        <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Video Title</label>
+                        <input 
+                          type="text" required
+                          value={item.title} onChange={e => updateQueueItem(item.id, { title: e.target.value })}
+                          disabled={item.status !== "WAITING" && item.status !== "FAILED" && item.status !== "CANCELLED"}
+                          className="w-full border border-gray-200 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-red-100 focus:border-red-300 focus:outline-none text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
+                          placeholder="Video title"
+                        />
+                      </div>
+                      <button 
+                        type="button" 
+                        onClick={() => removeQueueItem(item.id)}
+                        disabled={item.status === "UPLOADING" || item.status === "PROCESSING"}
+                        className="mt-5 text-gray-400 hover:text-red-500 disabled:opacity-30 disabled:hover:text-gray-400 transition-colors"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                      </button>
+                    </div>
+                    
+                    <div className="flex flex-col gap-1 text-xs font-semibold text-gray-600">
+                      <div className="flex items-center justify-between">
+                        <span>
+                          {item.status === "WAITING" && "Waiting in queue..."}
+                          {item.status === "UPLOADING" && "Uploading to R2..."}
+                          {item.status === "PROCESSING" && "Saving metadata..."}
+                          {item.status === "COMPLETED" && "Upload complete!"}
+                          {item.status === "FAILED" && "Upload failed"}
+                          {item.status === "CANCELLED" && "Upload cancelled"}
+                        </span>
+                        {(item.status === "UPLOADING" || item.status === "PROCESSING" || item.status === "COMPLETED") && (
+                          <span className={item.status === "COMPLETED" ? "text-green-600" : "text-[#c71e22]"}>{item.progress}%</span>
+                        )}
+                      </div>
+                      
+                      {item.error && (
+                        <div className="text-red-500 text-[11px] mt-0.5">{item.error}</div>
+                      )}
+
+                      {item.status === "UPLOADING" && (
+                        <div className="flex flex-col md:flex-row md:items-center justify-between text-gray-500 mt-1">
+                          <span>{formatBytes(item.uploadedBytes)} / {formatBytes(item.file.size)}</span>
+                          <span>{formatBytes(item.speed)}/s • ETA: {formatTime(item.timeRemaining)}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </div>
           
-          <div className="flex justify-end gap-3">
+          <div className="p-6 border-t border-gray-100 flex justify-end gap-3 shrink-0">
             <button 
               type="button" 
               onClick={attemptClose} 
-              disabled={status === "PROCESSING" || status === "COMPRESSING"} 
               className="px-5 py-2.5 text-gray-600 font-medium hover:bg-gray-100 rounded-xl transition-colors disabled:opacity-50 text-sm"
             >
-              {status === "UPLOADING" || status === "COMPRESSING" ? "Cancel Upload" : "Close"}
+              {isUploading ? "Cancel All" : "Close"}
             </button>
             <button 
               type="submit" 
-              disabled={status === "COMPRESSING" || status === "UPLOADING" || status === "PROCESSING" || status === "COMPLETED" || status === "CANCELLED" || !file || !title} 
+              disabled={isUploading || queue.length === 0 || queue.every(q => q.status === "COMPLETED" || q.status === "PROCESSING")} 
               className="px-5 py-2.5 bg-[#c71e22] text-white font-semibold rounded-xl hover:bg-[#a5191c] transition-colors disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-sm"
             >
-              {(status === "COMPRESSING" || status === "UPLOADING" || status === "PROCESSING") ? (
+              {isUploading ? (
                 <>
                   <svg className="animate-spin -ml-1 mr-1.5 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                   </svg>
-                  {status === "COMPRESSING" ? "Compressing..." : status === "UPLOADING" ? "Uploading..." : "Processing..."}
+                  Uploading...
                 </>
-              ) : status === "COMPLETED" ? "Success!" : "Upload Video"}
+              ) : "Start Upload"}
             </button>
           </div>
         </form>

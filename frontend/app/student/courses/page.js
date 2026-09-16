@@ -102,7 +102,7 @@ export default function MyCoursesPage() {
             
             return (
               <Link 
-                href={`/student/courses/${course._id}`}
+                href={`/student/course?id=${course._id}`}
                 key={course._id} 
                 className={`bg-white rounded-[20px] border border-gray-100 shadow-sm overflow-hidden flex flex-col hover:shadow-md transition-shadow group relative cursor-pointer block ${course.status === 'inactive' ? 'grayscale opacity-80' : ''}`}
               >
@@ -117,7 +117,7 @@ export default function MyCoursesPage() {
                 )}
 
                 {/* Visual Thumbnail Area */}
-                <div className={`h-40 w-full relative overflow-hidden flex flex-col justify-end ${
+                <div className={`aspect-video w-full relative overflow-hidden flex flex-col justify-end ${
                   isWebCourse && !course.thumbnail ? 'bg-[#fcf3cc]' : !course.thumbnail ? 'bg-[#d2e7fe]' : 'bg-gray-100'
                 }`}>
                   {course.thumbnail ? (

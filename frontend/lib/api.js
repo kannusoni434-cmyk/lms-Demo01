@@ -1,4 +1,14 @@
-export const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://lmsbackend.jainscomputer.com/api';
+let apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://lmsbackend.jainscomputer.com/api';
+
+if (typeof window !== 'undefined') {
+  const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+  // Force the production backend URL if the app is hosted live but the env variable was baked as localhost
+  if (!isLocalhost && (apiUrl.includes('localhost') || apiUrl.includes('127.0.0.1'))) {
+    apiUrl = 'https://lmsbackend.jainscomputer.com/api';
+  }
+}
+
+export const API_URL = apiUrl;
 
 export const fetchApi = async (endpoint, options = {}) => {
   const cleanBase = API_URL.replace(/\/$/, "");
@@ -51,9 +61,10 @@ export const fetchApi = async (endpoint, options = {}) => {
   if (response.status === 401) {
     if (typeof window !== 'undefined') {
       const isStudent = window.location.pathname.startsWith('/student');
-      const targetLogin = isStudent ? '/student/login' : '/';
+      const targetLogin = isStudent ? '/student/login' : '/admin/login';
       
-      if (window.location.pathname !== targetLogin) {
+      const currentPath = window.location.pathname.replace(/\/$/, '');
+      if (currentPath !== targetLogin) {
         console.error(`
 [AUTO LOGOUT DEBUG]
 Reason: 401 Unauthorized from API interceptor

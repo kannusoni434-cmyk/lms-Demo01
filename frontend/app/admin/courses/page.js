@@ -117,7 +117,7 @@ export default function AdminCoursesPage() {
             const isWebCourse = course.name.toLowerCase().includes('web');
             return (
               <Link 
-                href={`/admin/courses/${course._id}`}
+                href={`/admin/course?id=${course._id}`}
                 key={course._id} 
                 className={`bg-white rounded-[20px] border border-gray-100 shadow-sm overflow-hidden flex flex-col hover:shadow-md transition-shadow group relative cursor-pointer block ${course.status === 'inactive' ? 'grayscale opacity-80' : ''}`}
               >
@@ -150,7 +150,7 @@ export default function AdminCoursesPage() {
                 </div>
 
                 {/* Visual Thumbnail Area */}
-                <div className={`h-40 w-full relative overflow-hidden flex flex-col justify-end ${
+                <div className={`aspect-video w-full relative overflow-hidden flex flex-col justify-end ${
                   isWebCourse && !course.thumbnail ? 'bg-[#fcf3cc]' : !course.thumbnail ? 'bg-[#d2e7fe]' : 'bg-gray-100'
                 }`}>
                   {course.thumbnail ? (
@@ -222,13 +222,39 @@ function CourseModal({ course, onClose, onSuccess }) {
   const handleFileChange = (e) => {
     const file = e.target.files[0];
     if (file) {
-      if (file.size > 2 * 1024 * 1024) {
-        setError("File size must be less than 2MB");
+      if (file.size > 10 * 1024 * 1024) {
+        setError("File size must be less than 10MB");
         return;
       }
       const reader = new FileReader();
       reader.onloadend = () => {
-        setThumbnail(reader.result);
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement("canvas");
+          const targetWidth = 1280;
+          const targetHeight = 720;
+          canvas.width = targetWidth;
+          canvas.height = targetHeight;
+          const ctx = canvas.getContext("2d");
+          
+          // Draw with black background (to avoid transparent areas if any)
+          ctx.fillStyle = "#000000";
+          ctx.fillRect(0, 0, targetWidth, targetHeight);
+          
+          // Calculate scale to fit without stretching
+          const scale = Math.max(targetWidth / img.width, targetHeight / img.height);
+          const x = (targetWidth / scale - img.width) / 2;
+          const y = (targetHeight / scale - img.height) / 2;
+          
+          ctx.save();
+          ctx.scale(scale, scale);
+          ctx.drawImage(img, x, y);
+          ctx.restore();
+          
+          const resizedImage = canvas.toDataURL("image/jpeg", 0.85);
+          setThumbnail(resizedImage);
+        };
+        img.src = reader.result;
       };
       reader.readAsDataURL(file);
     }
@@ -332,7 +358,7 @@ function CourseModal({ course, onClose, onSuccess }) {
             )}
             
             {thumbnail && (
-              <div className="mt-3 relative w-full h-28 rounded-xl overflow-hidden border border-gray-200">
+              <div className="mt-3 relative w-full aspect-video rounded-xl overflow-hidden border border-gray-200">
                 <img src={thumbnail} alt="Thumbnail preview" className="w-full h-full object-cover" />
                 <button 
                   type="button" 

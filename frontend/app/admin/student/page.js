@@ -1,11 +1,13 @@
 "use client";
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { fetchApi } from "@/lib/api";
+import { Suspense } from "react";
 
-export default function StudentDetailsPage() {
-  const { id } = useParams();
+function StudentDetailsContent() {
+  const searchParams = useSearchParams();
+  const id = searchParams.get('id');
   const [student, setStudent] = useState(null);
   const [accessRecords, setAccessRecords] = useState([]);
   const [courses, setCourses] = useState([]);
@@ -229,6 +231,14 @@ export default function StudentDetailsPage() {
         />
       )}
     </div>
+  );
+}
+
+export default function StudentDetailsPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-center text-gray-500">Loading student details...</div>}>
+      <StudentDetailsContent />
+    </Suspense>
   );
 }
 
