@@ -88,6 +88,7 @@ function StudentDetailsContent() {
       
       if (res.ok) {
         alert(`Password reset successfully!\n\nNew Password: ${newPassword}\n\nPlease copy this and share it with the student.`);
+        fetchStudentData();
       } else {
         const err = await res.json();
         alert(err.error || "Failed to reset password");
