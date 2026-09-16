@@ -209,6 +209,7 @@ function CourseDetailsContent() {
                       <div>
                         <span className="text-[10px] font-bold text-[#c71e22] uppercase tracking-wider mb-1 block">Lesson {index + 1}</span>
                         <h3 className="font-semibold text-gray-900 text-sm line-clamp-1">{video.title}</h3>
+                        <span className="text-[10px] text-gray-500 block mt-0.5">Uploaded: {new Date(video.createdAt || video.uploadedAt || Date.now()).toLocaleDateString()}</span>
                         {video.processingStatus === 'processing' ? (
                           <span className="flex items-center text-amber-500 text-xs">
                             <div className="w-2 h-2 bg-amber-500 rounded-full animate-pulse mr-1"></div>

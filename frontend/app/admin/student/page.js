@@ -69,6 +69,34 @@ function StudentDetailsContent() {
     }
   };
 
+  const handleResetPassword = async () => {
+    if (!confirm("Are you sure you want to generate a new password for this student?")) return;
+    
+    // Generate a random 8-character password
+    const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$*";
+    let newPassword = "";
+    for (let i = 0; i < 8; i++) {
+      newPassword += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    
+    try {
+      const res = await fetchApi(`/students/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: newPassword })
+      });
+      
+      if (res.ok) {
+        alert(`Password reset successfully!\n\nNew Password: ${newPassword}\n\nPlease copy this and share it with the student.`);
+      } else {
+        const err = await res.json();
+        alert(err.error || "Failed to reset password");
+      }
+    } catch (e) {
+      alert("An unexpected error occurred");
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center h-full min-h-[400px]">
@@ -126,13 +154,22 @@ function StudentDetailsContent() {
       {/* Course Access Section */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <h2 className="text-lg font-bold text-gray-900">Course Access</h2>
-        <button 
-          onClick={() => setIsAssignModalOpen(true)}
-          className="bg-[#c71e22] hover:bg-[#a5191c] text-white px-5 py-2.5 rounded-xl shadow-sm transition-colors font-semibold text-sm flex items-center gap-2"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4"></path></svg>
-          Assign Course
-        </button>
+        <div className="flex items-center gap-2">
+          <button 
+            onClick={handleResetPassword}
+            className="bg-white hover:bg-gray-50 text-gray-700 px-4 py-2.5 rounded-xl shadow-sm transition-colors font-semibold text-sm flex items-center gap-2 border border-gray-200"
+          >
+            <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"></path></svg>
+            Reset Password
+          </button>
+          <button 
+            onClick={() => setIsAssignModalOpen(true)}
+            className="bg-[#c71e22] hover:bg-[#a5191c] text-white px-5 py-2.5 rounded-xl shadow-sm transition-colors font-semibold text-sm flex items-center gap-2"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4"></path></svg>
+            Assign Course
+          </button>
+        </div>
       </div>
 
       {/* Course Access Table */}

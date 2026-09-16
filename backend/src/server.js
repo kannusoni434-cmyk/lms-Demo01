@@ -29,7 +29,9 @@ const allowedOrigins = [
   process.env.FRONTEND_URL,
   'http://localhost:3000',
   'http://127.0.0.1:3000',
-  'https://lms-demo-mauve.vercel.app'
+  'https://lms-demo-mauve.vercel.app',
+  'https://lms.jainscomputer.com',
+  'https://www.lms.jainscomputer.com'
 ].filter(Boolean);
 
 app.use(cors({
@@ -38,6 +40,7 @@ app.use(cors({
     if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
+      console.warn(`[CORS] Rejected origin: ${origin}`);
       callback(new Error('Not allowed by CORS'));
     }
   },

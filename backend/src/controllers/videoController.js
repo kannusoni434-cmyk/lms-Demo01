@@ -98,7 +98,7 @@ export const uploadVideo = async (req, res) => {
 export const getCourseVideos = async (req, res) => {
   try {
     const { courseId } = req.params;
-    const videos = await Video.find({ courseId }).sort({ order: 1 });
+    const videos = await Video.find({ courseId }).sort({ createdAt: -1 });
     res.status(200).json(videos);
   } catch (error) {
     console.error("Get course videos error:", error);
@@ -158,7 +158,7 @@ export const deleteVideo = async (req, res) => {
     await Video.findByIdAndDelete(videoId);
 
     // Reorder remaining videos
-    const remainingVideos = await Video.find({ courseId: video.courseId }).sort({ order: 1 });
+    const remainingVideos = await Video.find({ courseId: video.courseId }).sort({ createdAt: -1 });
     for (let i = 0; i < remainingVideos.length; i++) {
       remainingVideos[i].order = i + 1;
       await remainingVideos[i].save();

@@ -374,10 +374,10 @@ function StudentCourseDetailsContent() {
                   </svg>
                   Video Description
                 </h3>
-                {playingVideo?.expiresAt && (
+                {(playingVideo?.expiresAt || course?.expiryDate) && (
                   <span className="bg-amber-50 text-amber-600 text-sm font-bold px-3 py-1 rounded-lg border border-amber-100 flex items-center gap-1.5 shadow-sm">
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                    Valid until: {new Date(playingVideo.expiresAt).toLocaleDateString()}
+                    Valid until: {new Date(playingVideo?.expiresAt || course?.expiryDate).toLocaleDateString()}
                   </span>
                 )}
               </div>
@@ -481,10 +481,10 @@ function StudentCourseDetailsContent() {
                       {video.processingStatus === 'processing' && (
                         <span className="inline-block mt-1 mb-1 text-[10px] font-semibold bg-yellow-100 text-yellow-800 px-1.5 py-0.5 rounded">Processing Video...</span>
                       )}
-                      {video.expiresAt && (
+                      {(video.expiresAt || course?.expiryDate) && (
                         <div className="text-[10px] text-amber-600 font-bold mb-1.5 flex items-center gap-1">
                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                           Expires: {new Date(video.expiresAt).toLocaleDateString()}
+                           Expires: {new Date(video.expiresAt || course?.expiryDate).toLocaleDateString()}
                         </div>
                       )}
                       <div className="flex items-center gap-2">

@@ -7,6 +7,25 @@ export default function VideoPlayer({ src, poster, isHls }) {
   const containerRef = useRef(null);
   const playerRef = useRef(null);
   const [errorState, setErrorState] = useState(null);
+  const [isFocused, setIsFocused] = useState(true);
+
+  useEffect(() => {
+    const handleFocus = () => setIsFocused(true);
+    const handleBlur = () => {
+      setIsFocused(false);
+      if (playerRef.current && !playerRef.current.paused()) {
+        playerRef.current.pause();
+      }
+    };
+    
+    window.addEventListener("focus", handleFocus);
+    window.addEventListener("blur", handleBlur);
+    
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+      window.removeEventListener("blur", handleBlur);
+    };
+  }, []);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -474,8 +493,24 @@ export default function VideoPlayer({ src, poster, isHls }) {
   }
 
   return (
-    <div data-vjs-player className="w-full h-full relative" style={{ borderRadius: "inherit" }}>
+    <div 
+      data-vjs-player 
+      className="w-full h-full relative" 
+      style={{ borderRadius: "inherit" }}
+      onContextMenu={(e) => e.preventDefault()}
+    >
       <div ref={containerRef} className="w-full h-full" style={{ borderRadius: "inherit" }}></div>
+      {!isFocused && (
+        <div className="absolute inset-0 bg-black z-50 flex items-center justify-center flex-col">
+          <svg className="w-12 h-12 text-gray-500 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+          </svg>
+          <p className="text-white text-lg font-bold">Playback Paused</p>
+          <p className="text-gray-400 text-sm mt-2 max-w-sm text-center">
+            For security reasons, video playback is hidden while this window is out of focus. Click here to resume.
+          </p>
+        </div>
+      )}
       <style dangerouslySetInnerHTML={{__html: `
         .lms-video-container {
           aspect-ratio: 16 / 9;

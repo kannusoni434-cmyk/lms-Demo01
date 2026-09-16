@@ -96,7 +96,11 @@ export const getCourseDetails = async (req, res) => {
     }
 
     const course = await Course.findById(courseId);
-    res.status(200).json(course);
+    const courseObj = course.toObject();
+    if (accessCheck.accessRecord) {
+      courseObj.expiryDate = accessCheck.accessRecord.expiryDate;
+    }
+    res.status(200).json(courseObj);
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch course details' });
   }
@@ -112,7 +116,7 @@ export const getCourseVideos = async (req, res) => {
       return res.status(403).json({ error: accessCheck.reason });
     }
 
-    const videos = await Video.find({ courseId }).sort({ order: 1 });
+    const videos = await Video.find({ courseId }).sort({ createdAt: -1 });
     res.status(200).json(videos);
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch course videos' });
