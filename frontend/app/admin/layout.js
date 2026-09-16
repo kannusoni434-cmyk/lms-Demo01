@@ -10,7 +10,7 @@ export default function AdminLayout({ children }) {
   const router = useRouter();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
-  if (pathname === '/admin/login') {
+  if (pathname === '/admin/login' || pathname === '/admin/login/') {
     return <>{children}</>;
   }
 
