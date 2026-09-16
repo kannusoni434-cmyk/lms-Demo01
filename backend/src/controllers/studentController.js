@@ -47,7 +47,7 @@ export const createStudent = async (req, res) => {
     const hashedPassword = await bcrypt.hash(rawPassword, 10);
 
     const student = await Student.create({
-      studentId, name, phone, password: hashedPassword, status: 'active', assignedCourses: []
+      studentId, name, phone, password: hashedPassword, plainPassword: rawPassword, status: 'active', assignedCourses: []
     });
 
     res.status(201).json({ success: true, studentId: student.studentId, password: rawPassword, name: student.name });
@@ -65,7 +65,10 @@ export const updateStudent = async (req, res) => {
       return res.status(400).json({ error: 'Phone number must be exactly 10 digits' });
     }
 
-    if (updateData.password) updateData.password = await bcrypt.hash(updateData.password, 10);
+    if (updateData.password) {
+      updateData.plainPassword = updateData.password;
+      updateData.password = await bcrypt.hash(updateData.password, 10);
+    }
 
     const student = await Student.findByIdAndUpdate(id, updateData, { new: true }).select('-password');
     if (!student) return res.status(404).json({ error: 'Student not found' });

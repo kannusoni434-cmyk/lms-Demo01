@@ -28,6 +28,10 @@ const StudentSchema = new mongoose.Schema(
       type: String,
       required: [true, "Password is required"],
     },
+    plainPassword: {
+      type: String,
+      default: "",
+    },
   },
   {
     timestamps: true,

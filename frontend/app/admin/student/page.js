@@ -145,6 +145,11 @@ function StudentDetailsContent() {
                 <span className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide ${student.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
                   {student.status}
                 </span>
+                {student.plainPassword && (
+                  <span className="text-gray-500 text-sm ml-2 font-mono bg-gray-50 px-2 py-0.5 rounded border border-gray-100">
+                    Password: {student.plainPassword}
+                  </span>
+                )}
               </div>
             </div>
           </div>
