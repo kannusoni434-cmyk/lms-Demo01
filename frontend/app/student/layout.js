@@ -70,6 +70,7 @@ Stack trace: ${err.stack}
 
   const handleLogout = async () => {
     try {
+      if (typeof window !== 'undefined') localStorage.removeItem('token');
       await fetchApi("/auth/logout", { method: "POST" });
       router.push("/student/login");
     } catch (error) {

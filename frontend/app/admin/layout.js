@@ -16,6 +16,7 @@ export default function AdminLayout({ children }) {
 
   const handleLogout = async () => {
     try {
+      if (typeof window !== 'undefined') localStorage.removeItem('token');
       await fetchApi('/auth/logout', { method: 'POST' });
       router.push('/admin/login');
     } catch (e) {

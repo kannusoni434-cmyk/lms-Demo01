@@ -58,7 +58,7 @@ export const fetchApi = async (endpoint, options = {}) => {
     throw error;
   }
 
-  if (response.status === 401) {
+  if (response.status === 401 || response.status === 403) {
     if (typeof window !== 'undefined') {
       const isStudent = window.location.pathname.startsWith('/student');
       const targetLogin = isStudent ? '/student/login' : '/admin/login';
@@ -67,13 +67,14 @@ export const fetchApi = async (endpoint, options = {}) => {
       if (currentPath !== targetLogin) {
         console.error(`
 [AUTO LOGOUT DEBUG]
-Reason: 401 Unauthorized from API interceptor
-HTTP status: 401
+Reason: 401/403 from API interceptor
+HTTP status: ${response.status}
 Request URL: ${url}
 Role: ${isStudent ? 'student' : 'admin'}
 Timestamp: ${new Date().toISOString()}
 Stack trace: ${new Error().stack}
         `);
+        localStorage.removeItem('token');
         window.location.href = targetLogin;
       }
     }
