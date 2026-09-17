@@ -32,6 +32,10 @@ const StudentSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+    currentSessionId: {
+      type: String,
+      default: "",
+    },
   },
   {
     timestamps: true,

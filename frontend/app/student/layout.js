@@ -3,6 +3,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { fetchApi } from "@/lib/api";
 import { useState, useEffect } from "react";
+import SessionConflictModal from "@/components/SessionConflictModal";
 
 export default function StudentLayout({ children }) {
   const pathname = usePathname();
@@ -176,6 +177,7 @@ Stack trace: ${err.stack}
           })}
         </div>
       )}
+      <SessionConflictModal />
     </div>
   );
 }

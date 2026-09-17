@@ -1,5 +1,6 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
 import Admin from '../models/Admin.js';
 import Student from '../models/Student.js';
 
@@ -30,7 +31,11 @@ export const adminLogin = async (req, res) => {
     const isMatch = await bcrypt.compare(password, admin.password);
     if (!isMatch) return res.status(401).json({ error: 'Invalid credentials' });
 
-    const token = generateTokenAndSetCookie(res, { role: 'admin', userId: admin._id });
+    const sessionId = crypto.randomUUID();
+    admin.currentSessionId = sessionId;
+    await admin.save();
+
+    const token = generateTokenAndSetCookie(res, { role: 'admin', userId: admin._id, sessionId });
     res.status(200).json({ success: true, message: 'Admin logged in successfully', token });
   } catch (error) {
     res.status(500).json({ error: 'Internal Server Error' });
@@ -49,7 +54,11 @@ export const studentLogin = async (req, res) => {
     const isMatch = await bcrypt.compare(password, student.password);
     if (!isMatch) return res.status(401).json({ error: 'Invalid credentials' });
 
-    const token = generateTokenAndSetCookie(res, { role: 'student', userId: student._id });
+    const sessionId = crypto.randomUUID();
+    student.currentSessionId = sessionId;
+    await student.save();
+
+    const token = generateTokenAndSetCookie(res, { role: 'student', userId: student._id, sessionId });
     res.status(200).json({ success: true, message: 'Student logged in successfully', token });
   } catch (error) {
     res.status(500).json({ error: 'Internal Server Error' });

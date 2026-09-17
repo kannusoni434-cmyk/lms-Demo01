@@ -44,6 +44,11 @@ export const assignCourse = async (req, res) => {
       status: 'active'
     });
 
+    if (student.assignedCourses && !student.assignedCourses.includes(courseId.toString())) {
+      student.assignedCourses.push(courseId.toString());
+      await student.save();
+    }
+
     res.status(201).json(newAccess);
   } catch (error) {
     if (error.code === 11000) {
@@ -123,5 +128,27 @@ export const restoreCourseAccess = async (req, res) => {
     res.status(200).json(access);
   } catch (error) {
     res.status(500).json({ error: 'Failed to restore course access' });
+  }
+};
+
+export const deleteCourseAccess = async (req, res) => {
+  try {
+    const { studentId, accessId } = req.params;
+
+    const access = await CourseAccess.findOneAndDelete({ _id: accessId, studentId });
+    if (!access) return res.status(404).json({ error: 'Access record not found' });
+
+    // Remove the courseId from the student's assignedCourses array to keep counts accurate
+    const student = await Student.findById(studentId);
+    if (student && student.assignedCourses) {
+      student.assignedCourses = student.assignedCourses.filter(
+        id => id.toString() !== access.courseId.toString()
+      );
+      await student.save();
+    }
+
+    res.status(200).json({ success: true, message: 'Course access deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to delete course access' });
   }
 };

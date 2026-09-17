@@ -230,8 +230,33 @@ function AddStudentModal({ onClose, onSuccess }) {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
+  const [selectedCourses, setSelectedCourses] = useState([]);
+  const [availableCourses, setAvailableCourses] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    const fetchCourses = async () => {
+      try {
+        const res = await fetchApi("/courses");
+        if (res.ok) {
+          const data = await res.json();
+          setAvailableCourses(data.filter(c => c.status === "active"));
+        }
+      } catch (err) {
+        console.error("Failed to fetch courses for assignment", err);
+      }
+    };
+    fetchCourses();
+  }, []);
+
+  const handleCourseToggle = (courseId) => {
+    setSelectedCourses(prev => 
+      prev.includes(courseId) 
+        ? prev.filter(id => id !== courseId)
+        : [...prev, courseId]
+    );
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -240,6 +265,7 @@ function AddStudentModal({ onClose, onSuccess }) {
     try {
       const payload = { name, phone };
       if (password) payload.password = password;
+      if (selectedCourses.length > 0) payload.courseIds = selectedCourses;
 
       const res = await fetchApi("/students", {
         method: "POST",
@@ -301,6 +327,26 @@ function AddStudentModal({ onClose, onSuccess }) {
               placeholder="Leave blank to auto-generate"
             />
           </div>
+          
+          {availableCourses.length > 0 && (
+            <div className="mb-6">
+              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Assign Courses (Optional)</label>
+              <div className="max-h-40 overflow-y-auto border border-gray-200 rounded-xl p-3 bg-gray-50/50 space-y-2">
+                {availableCourses.map(course => (
+                  <label key={course._id} className="flex items-center gap-3 p-2 hover:bg-white rounded-lg cursor-pointer transition-colors border border-transparent hover:border-gray-200">
+                    <input 
+                      type="checkbox" 
+                      checked={selectedCourses.includes(course._id)}
+                      onChange={() => handleCourseToggle(course._id)}
+                      className="w-4 h-4 text-[#c71e22] bg-white border-gray-300 rounded focus:ring-[#c71e22] focus:ring-2"
+                    />
+                    <span className="text-sm font-medium text-gray-700 select-none">{course.name}</span>
+                  </label>
+                ))}
+              </div>
+              <p className="text-[10px] text-gray-400 mt-2 font-medium">Selected courses will be granted 1-year access.</p>
+            </div>
+          )}
           <div className="flex justify-end gap-3">
             <button type="button" onClick={onClose} className="px-5 py-2.5 text-gray-600 hover:bg-gray-100 rounded-xl transition-colors font-medium text-sm">Cancel</button>
             <button type="submit" disabled={loading} className="px-5 py-2.5 bg-[#c71e22] text-white rounded-xl hover:bg-[#a5191c] transition-colors disabled:opacity-50 font-semibold text-sm">

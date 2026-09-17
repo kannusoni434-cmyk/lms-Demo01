@@ -2,6 +2,7 @@ import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import Student from '../models/Student.js';
 import Counter from '../models/Counter.js';
+import CourseAccess from '../models/CourseAccess.js';
 
 export const getStudents = async (req, res) => {
   try {
@@ -25,7 +26,7 @@ export const getStudentById = async (req, res) => {
 
 export const createStudent = async (req, res) => {
   try {
-    const { name, phone, password } = req.body;
+    const { name, phone, password, courseIds } = req.body;
     if (!name || !phone) return res.status(400).json({ error: 'Name and phone are required' });
 
     if (!/^\d{10}$/.test(phone)) {
@@ -49,6 +50,25 @@ export const createStudent = async (req, res) => {
     const student = await Student.create({
       studentId, name, phone, password: hashedPassword, plainPassword: rawPassword, status: 'active', assignedCourses: []
     });
+
+    if (courseIds && Array.isArray(courseIds) && courseIds.length > 0) {
+      const startDate = new Date();
+      const expiryDate = new Date();
+      expiryDate.setFullYear(expiryDate.getFullYear() + 1);
+
+      const accessDocs = courseIds.map(cid => ({
+        studentId: student._id,
+        courseId: cid,
+        startDate,
+        expiryDate,
+        status: 'active'
+      }));
+      await CourseAccess.insertMany(accessDocs);
+      
+      // Update student's internal array for admin UI counting
+      student.assignedCourses = courseIds;
+      await student.save();
+    }
 
     res.status(201).json({ success: true, studentId: student.studentId, password: rawPassword, name: student.name });
   } catch (error) {

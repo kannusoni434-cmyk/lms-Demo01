@@ -1,5 +1,6 @@
 "use client";
 import React, { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import videojs from "video.js";
 import "video.js/dist/video-js.css";
 
@@ -8,22 +9,51 @@ export default function VideoPlayer({ src, poster, isHls }) {
   const playerRef = useRef(null);
   const [errorState, setErrorState] = useState(null);
   const [isFocused, setIsFocused] = useState(true);
+  const [isSecureBlocked, setIsSecureBlocked] = useState(false);
+  const isBlockedRef = useRef(false);
+  const [playerNode, setPlayerNode] = useState(null);
+
+  const setBlocked = (blocked) => {
+    setIsSecureBlocked(blocked);
+    isBlockedRef.current = blocked;
+    if (blocked && playerRef.current) {
+      if (!playerRef.current.paused()) {
+        playerRef.current.pause();
+      }
+      playerRef.current.muted(true);
+    }
+  };
 
   useEffect(() => {
-    const handleFocus = () => setIsFocused(true);
-    const handleBlur = () => {
-      setIsFocused(false);
-      if (playerRef.current && !playerRef.current.paused()) {
-        playerRef.current.pause();
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        setBlocked(true);
+      } else {
+        setBlocked(false);
       }
     };
     
-    window.addEventListener("focus", handleFocus);
+    // Also handle window blur as an extra precaution
+    const handleBlur = () => {
+      setIsFocused(false);
+      setBlocked(true);
+    };
+
+    const handleFocus = () => {
+      setIsFocused(true);
+      if (!document.hidden) {
+        setBlocked(false);
+      }
+    };
+    
+    document.addEventListener("visibilitychange", handleVisibilityChange);
     window.addEventListener("blur", handleBlur);
+    window.addEventListener("focus", handleFocus);
     
     return () => {
-      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.removeEventListener("blur", handleBlur);
+      window.removeEventListener("focus", handleFocus);
     };
   }, []);
 
@@ -150,8 +180,13 @@ export default function VideoPlayer({ src, poster, isHls }) {
 
         player.el().setAttribute('tabIndex', '-1');
         player.el().focus();
+        setPlayerNode(player.el());
 
         player.el().addEventListener('keydown', (e) => {
+          if (isBlockedRef.current || !isFocused) {
+            e.preventDefault();
+            return;
+          }
           if (e.code === 'Space') {
             e.preventDefault();
             player.paused() ? player.play() : player.pause();
@@ -492,25 +527,50 @@ export default function VideoPlayer({ src, poster, isHls }) {
     );
   }
 
+  const renderOverlays = () => {
+    return (
+      <>
+        {isSecureBlocked && (
+          <div className="absolute inset-0 bg-black z-[9999] flex items-center justify-center flex-col pointer-events-auto p-4 md:p-6">
+            <svg className="w-8 h-8 md:w-12 md:h-12 text-red-500 mb-2 md:mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+            </svg>
+            <p className="text-white text-base md:text-lg font-bold text-center leading-tight">Playback Paused (Security Protection)</p>
+            <p className="text-gray-400 text-xs md:text-sm mt-2 max-w-sm text-center leading-relaxed">
+              Video hidden to prevent screen recording and snooping. Resume by returning to the player.
+            </p>
+          </div>
+        )}
+        {!isFocused && !isSecureBlocked && (
+          <div className="absolute inset-0 bg-black z-[9999] flex items-center justify-center flex-col pointer-events-auto p-4 md:p-6">
+            <svg className="w-8 h-8 md:w-12 md:h-12 text-gray-500 mb-2 md:mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+            </svg>
+            <p className="text-white text-base md:text-lg font-bold text-center leading-tight">Playback Paused</p>
+            <p className="text-gray-400 text-xs md:text-sm mt-2 max-w-sm text-center leading-relaxed">
+              For security reasons, video playback is hidden while this window is out of focus. Click here to resume.
+            </p>
+          </div>
+        )}
+      </>
+    );
+  };
+
   return (
     <div 
       data-vjs-player 
-      className="w-full h-full relative" 
+      className={`w-full h-full relative ${isSecureBlocked || !isFocused ? 'pointer-events-none' : ''}`}
       style={{ borderRadius: "inherit" }}
       onContextMenu={(e) => e.preventDefault()}
+      onMouseLeave={() => {
+        setBlocked(true);
+      }}
+      onMouseEnter={() => {
+        setBlocked(false);
+      }}
     >
-      <div ref={containerRef} className="w-full h-full" style={{ borderRadius: "inherit" }}></div>
-      {!isFocused && (
-        <div className="absolute inset-0 bg-black z-50 flex items-center justify-center flex-col">
-          <svg className="w-12 h-12 text-gray-500 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-          </svg>
-          <p className="text-white text-lg font-bold">Playback Paused</p>
-          <p className="text-gray-400 text-sm mt-2 max-w-sm text-center">
-            For security reasons, video playback is hidden while this window is out of focus. Click here to resume.
-          </p>
-        </div>
-      )}
+      <div ref={containerRef} className="w-full h-full pointer-events-auto" style={{ borderRadius: "inherit" }}></div>
+      {playerNode ? createPortal(renderOverlays(), playerNode) : renderOverlays()}
       <style dangerouslySetInnerHTML={{__html: `
         .lms-video-container {
           aspect-ratio: 16 / 9;

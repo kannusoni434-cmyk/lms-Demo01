@@ -1,6 +1,6 @@
 import express from 'express';
 import { getStudents, getStudentById, createStudent, updateStudent, deleteStudent } from '../controllers/studentController.js';
-import { getStudentCourseAccess, assignCourse, editCourseAccess, revokeCourseAccess, restoreCourseAccess } from '../controllers/courseAccessController.js';
+import { getStudentCourseAccess, assignCourse, editCourseAccess, revokeCourseAccess, restoreCourseAccess, deleteCourseAccess } from '../controllers/courseAccessController.js';
 import { verifyAdmin } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
@@ -22,7 +22,8 @@ router.route('/:studentId/course-access')
   .post(assignCourse);
 
 router.route('/:studentId/course-access/:accessId')
-  .patch(editCourseAccess);
+  .patch(editCourseAccess)
+  .delete(deleteCourseAccess);
 
 router.route('/:studentId/course-access/:accessId/revoke')
   .patch(revokeCourseAccess);

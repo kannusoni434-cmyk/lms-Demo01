@@ -15,6 +15,10 @@ const AdminSchema = new mongoose.Schema(
       type: String,
       required: [true, "Password is required"],
     },
+    currentSessionId: {
+      type: String,
+      default: "",
+    },
   },
   {
     timestamps: true,

@@ -4,6 +4,7 @@ import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
 import { fetchApi } from '@/lib/api';
 import { useState } from 'react';
+import SessionConflictModal from '@/components/SessionConflictModal';
 
 export default function AdminLayout({ children }) {
   const pathname = usePathname();
@@ -216,6 +217,7 @@ export default function AdminLayout({ children }) {
           <span>LMS Admin Panel</span>
         </footer>
       </main>
+      <SessionConflictModal />
     </div>
   );
 }

@@ -60,6 +60,20 @@ export const fetchApi = async (endpoint, options = {}) => {
 
   if (response.status === 401 || response.status === 403) {
     if (typeof window !== 'undefined') {
+      let isSessionConflict = false;
+      try {
+        const clonedRes = response.clone();
+        const data = await clonedRes.json();
+        if (data.message === 'SESSION_CONFLICT') {
+          isSessionConflict = true;
+        }
+      } catch (e) {}
+
+      if (isSessionConflict) {
+        window.dispatchEvent(new Event('session_conflict'));
+        return response; // Let the modal handle logout and redirect
+      }
+
       const isStudent = window.location.pathname.startsWith('/student');
       const targetLogin = isStudent ? '/student/login' : '/admin/login';
       

@@ -48,22 +48,12 @@ function StudentDetailsContent() {
     fetchStudentData();
   }, [id]);
 
-  const handleRevoke = async (accessId) => {
-    if (!confirm("Revoke this course access?")) return;
+  const handleDeleteAccess = async (accessId) => {
+    if (!confirm("Are you sure you want to permanently delete this course access? This action cannot be undone.")) return;
     try {
-      const res = await fetchApi(`/students/${id}/course-access/${accessId}/revoke`, { method: "PATCH" });
+      const res = await fetchApi(`/students/${id}/course-access/${accessId}`, { method: "DELETE" });
       if (res.ok) fetchStudentData();
-      else alert((await res.json()).error || "Failed to revoke");
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const handleRestore = async (accessId) => {
-    try {
-      const res = await fetchApi(`/students/${id}/course-access/${accessId}/restore`, { method: "PATCH" });
-      if (res.ok) fetchStudentData();
-      else alert((await res.json()).error || "Failed to restore");
+      else alert((await res.json()).error || "Failed to delete access");
     } catch (err) {
       console.error(err);
     }
@@ -230,21 +220,12 @@ function StudentDetailsContent() {
                         >
                           {isActive && !isExpired ? 'Edit' : 'Extend'}
                         </button>
-                        {isActive ? (
-                          <button 
-                            onClick={() => handleRevoke(record._id)}
-                            className="text-red-500 hover:text-red-700 font-semibold text-sm"
-                          >
-                            Revoke
-                          </button>
-                        ) : (
-                          <button 
-                            onClick={() => handleRestore(record._id)}
-                            className="text-green-500 hover:text-green-700 font-semibold text-sm"
-                          >
-                            Restore
-                          </button>
-                        )}
+                        <button 
+                          onClick={() => handleDeleteAccess(record._id)}
+                          className="text-red-500 hover:text-red-700 font-semibold text-sm"
+                        >
+                          Delete
+                        </button>
                       </td>
                     </tr>
                   )
