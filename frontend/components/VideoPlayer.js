@@ -562,12 +562,6 @@ export default function VideoPlayer({ src, poster, isHls }) {
       className={`w-full h-full relative ${isSecureBlocked || !isFocused ? 'pointer-events-none' : ''}`}
       style={{ borderRadius: "inherit" }}
       onContextMenu={(e) => e.preventDefault()}
-      onMouseLeave={() => {
-        setBlocked(true);
-      }}
-      onMouseEnter={() => {
-        setBlocked(false);
-      }}
     >
       <div ref={containerRef} className="w-full h-full pointer-events-auto" style={{ borderRadius: "inherit" }}></div>
       {playerNode ? createPortal(renderOverlays(), playerNode) : renderOverlays()}
