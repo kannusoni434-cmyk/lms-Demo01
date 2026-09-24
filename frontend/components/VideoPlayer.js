@@ -114,7 +114,6 @@ export default function VideoPlayer({ src, poster, isHls }) {
       fill: true,
       poster: poster || "",
       preload: "auto",
-      playbackRates: [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2],
       controlBar: {
         children: [
           "playToggle",
@@ -124,7 +123,6 @@ export default function VideoPlayer({ src, poster, isHls }) {
           "durationDisplay",
           "customControlSpacer",
           "progressControl",
-          "playbackRateMenuButton",
           "subsCapsButton",
           "fullscreenToggle",
         ],
@@ -386,6 +384,75 @@ export default function VideoPlayer({ src, poster, isHls }) {
             const fullscreenIdx = controlBar.children().findIndex(c => c.name() === "fullscreenToggle" || c.name() === "FullscreenToggle");
             const insertIdx = fullscreenIdx > -1 ? fullscreenIdx : controlBar.children().length;
             controlBar.addChild("QualityMenuButton", {}, insertIdx);
+          }
+        }
+
+        // --- Custom Speed Selector (replaces broken built-in playbackRateMenuButton) ---
+        if (!videojs.getComponent("SpeedMenuButton")) {
+          const MenuButton = videojs.getComponent("MenuButton");
+          const MenuItem = videojs.getComponent("MenuItem");
+
+          class SpeedMenuItem extends MenuItem {
+            constructor(player, options) {
+              super(player, options);
+              this.rate = options.rate;
+            }
+            handleClick(event) {
+              super.handleClick(event);
+              this.player().playbackRate(this.options_.rate);
+              this.player().trigger("speedSelected", this.options_.rate);
+            }
+          }
+          videojs.registerComponent("SpeedMenuItem", SpeedMenuItem);
+
+          class SpeedMenuButton extends MenuButton {
+            constructor(player, options) {
+              super(player, options);
+              this.controlText("Playback Speed");
+
+              player.on("speedSelected", (e, rate) => {
+                const el = this.el().querySelector(".vjs-icon-placeholder");
+                if (el) el.innerHTML = rate === 1 ? "1x" : rate + "x";
+
+                // Update selected state of menu items
+                const items = this.items || [];
+                items.forEach(item => {
+                  item.selected(item.options_.rate === rate);
+                });
+              });
+
+              // Set initial text
+              setTimeout(() => {
+                const el = this.el().querySelector(".vjs-icon-placeholder");
+                if (el && !el.innerHTML) el.innerHTML = "1x";
+              }, 100);
+            }
+
+            buildCSSClass() {
+              return `vjs-speed-selector ${super.buildCSSClass()}`;
+            }
+
+            createItems() {
+              const speeds = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
+              return speeds.map(rate => {
+                return new SpeedMenuItem(this.player(), {
+                  rate: rate,
+                  label: rate === 1 ? "Normal" : rate + "x",
+                  selected: rate === 1,
+                });
+              });
+            }
+          }
+          videojs.registerComponent("SpeedMenuButton", SpeedMenuButton);
+        }
+
+        // Add speed selector to control bar (before fullscreen button)
+        {
+          const controlBar = player.getChild("controlBar");
+          if (!controlBar.getChild("SpeedMenuButton") && !controlBar.getChild("speedMenuButton")) {
+            const fullscreenIdx = controlBar.children().findIndex(c => c.name() === "fullscreenToggle" || c.name() === "FullscreenToggle");
+            const insertIdx = fullscreenIdx > -1 ? fullscreenIdx : controlBar.children().length;
+            controlBar.addChild("SpeedMenuButton", {}, insertIdx);
           }
         }
         
@@ -690,6 +757,29 @@ export default function VideoPlayer({ src, poster, isHls }) {
           /* Hide PiP on mobile */
           .video-js .vjs-picture-in-picture-control {
             display: none !important;
+          }
+        }
+
+        /* ===== Custom Speed Selector ===== */
+        .video-js .vjs-speed-selector {
+          display: flex !important;
+          align-items: center;
+          justify-content: center;
+        }
+        .vjs-speed-selector .vjs-icon-placeholder {
+          font-family: inherit;
+          font-size: 1.2em;
+          line-height: 1.67;
+          text-align: center;
+        }
+        .vjs-speed-selector .vjs-menu-button {
+          width: 4em;
+        }
+
+        @media (max-width: 768px) {
+          .video-js .vjs-speed-selector .vjs-icon-placeholder {
+            font-size: 0.9em;
+            line-height: 2.2;
           }
         }
       `}} />
